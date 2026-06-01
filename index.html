@@ -337,16 +337,26 @@
     .modal-desc-ta::placeholder { color: #8993a4; }
     .modal-desc-ta:focus { background: #fff; border-color: #388bff; }
 
-    .desc-links { margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
-    .desc-links a {
-      font-size: 12.5px;
-      color: #0055cc;
-      text-decoration: underline;
-      word-break: break-all;
-      display: block;
-      padding: 2px 0;
+    .modal-desc-view {
+      width: 100%;
+      border: 1px solid transparent;
+      border-radius: 6px;
+      padding: 8px 10px;
+      font-size: 14px;
+      font-family: 'Inter', sans-serif;
+      color: #172b4d;
+      background: #e4e6ea;
+      min-height: 72px;
+      line-height: 1.45;
+      cursor: text;
+      word-break: break-word;
+      box-sizing: border-box;
+      transition: background 0.12s;
     }
-    .desc-links a:hover { color: #003d99; }
+    .modal-desc-view:hover { background: #dde1e7; }
+    .modal-desc-view a { color: #0055cc; text-decoration: underline; }
+    .modal-desc-view a:hover { color: #003d99; }
+    .desc-ph { color: #8993a4; }
 
     /* ── Checklist ── */
     .modal-section { margin-top: 18px; }
@@ -544,9 +554,9 @@
 
       <div>
         <div class="section-label">Description</div>
+        <div id="modal-desc-view" class="modal-desc-view"></div>
         <textarea id="modal-desc" class="modal-desc-ta" rows="3"
-                  placeholder="Add a more detailed description..."></textarea>
-        <div id="desc-links" class="desc-links"></div>
+                  placeholder="Add a more detailed description..." style="display:none"></textarea>
       </div>
 
       <div class="modal-section">
@@ -838,7 +848,9 @@ function openCardModal(cardId) {
   activeCardId = cardId;
   document.getElementById('modal-title').value = card.title;
   document.getElementById('modal-desc').value = card.description || '';
-  renderDescLinks(card.description || '');
+  document.getElementById('modal-desc').style.display = 'none';
+  document.getElementById('modal-desc-view').style.display = '';
+  renderDescView(card.description || '');
   document.getElementById('modal-col-select').value = card.column_id;
   document.getElementById('modal-deadline').value = card.deadline || '';
   renderChecklist();
@@ -852,7 +864,7 @@ function closeCardModal() {
 function syncModalHeader(card) {
   document.getElementById('modal-title').value = card.title;
   document.getElementById('modal-desc').value = card.description || '';
-  renderDescLinks(card.description || '');
+  renderDescView(card.description || '');
   document.getElementById('modal-col-select').value = card.column_id;
   document.getElementById('modal-deadline').value = card.deadline || '';
 }
@@ -901,11 +913,21 @@ document.getElementById('modal-title').addEventListener('blur', async () => {
 document.getElementById('modal-desc').addEventListener('blur', async () => {
   if (!activeCardId) return;
   const description = document.getElementById('modal-desc').value;
-  renderDescLinks(description);
+  document.getElementById('modal-desc').style.display = 'none';
+  document.getElementById('modal-desc-view').style.display = '';
+  renderDescView(description);
   const card = state.cards.find(c => c.id === activeCardId);
   if (card && description !== (card.description || '')) {
     await sb.from('cards').update({ description }).eq('id', activeCardId);
   }
+});
+
+document.getElementById('modal-desc-view').addEventListener('click', e => {
+  if (e.target.tagName === 'A') return;
+  document.getElementById('modal-desc-view').style.display = 'none';
+  const ta = document.getElementById('modal-desc');
+  ta.style.display = '';
+  ta.focus();
 });
 
 document.getElementById('modal-col-select').addEventListener('change', async () => {
@@ -1022,11 +1044,17 @@ function esc(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
-function renderDescLinks(text) {
-  const div = document.getElementById('desc-links');
-  const urls = (text || '').match(/https?:\/\/[^\s]+/g) || [];
-  div.innerHTML = urls.map(url =>
-    `<a href="${esc(url)}" target="_blank" rel="noopener noreferrer">${esc(url)}</a>`
+function renderDescView(text) {
+  const view = document.getElementById('modal-desc-view');
+  if (!text || !text.trim()) {
+    view.innerHTML = '<span class="desc-ph">Add a more detailed description…</span>';
+    return;
+  }
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  view.innerHTML = parts.map((part, i) =>
+    i % 2 === 1
+      ? `<a href="${esc(part)}" target="_blank" rel="noopener noreferrer">${esc(part)}</a>`
+      : esc(part).replace(/\n/g, '<br>')
   ).join('');
 }
 
