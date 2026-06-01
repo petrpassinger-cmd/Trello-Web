@@ -337,6 +337,24 @@
     .modal-desc-ta::placeholder { color: #8993a4; }
     .modal-desc-ta:focus { background: #fff; border-color: #388bff; }
 
+    .modal-desc-view {
+      min-height: 72px;
+      padding: 8px 10px;
+      font-size: 14px;
+      font-family: 'Inter', sans-serif;
+      color: #172b4d;
+      background: #e4e6ea;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      line-height: 1.45;
+      cursor: text;
+      word-break: break-word;
+      transition: background 0.12s;
+    }
+    .modal-desc-view:hover { background: #dde1e7; }
+    .modal-desc-view a { color: #0055cc; text-decoration: underline; word-break: break-all; }
+    .modal-desc-view .desc-placeholder { color: #8993a4; font-style: italic; }
+
     /* ── Checklist ── */
     .modal-section { margin-top: 18px; }
 
@@ -533,8 +551,9 @@
 
       <div>
         <div class="section-label">Description</div>
+        <div id="modal-desc-view" class="modal-desc-view"></div>
         <textarea id="modal-desc" class="modal-desc-ta" rows="3"
-                  placeholder="Add a more detailed description..."></textarea>
+                  placeholder="Add a more detailed description..." style="display:none"></textarea>
       </div>
 
       <div class="modal-section">
@@ -826,6 +845,9 @@ function openCardModal(cardId) {
   activeCardId = cardId;
   document.getElementById('modal-title').value = card.title;
   document.getElementById('modal-desc').value = card.description || '';
+  document.getElementById('modal-desc').style.display = 'none';
+  document.getElementById('modal-desc-view').style.display = '';
+  renderDescView(card.description || '');
   document.getElementById('modal-col-select').value = card.column_id;
   document.getElementById('modal-deadline').value = card.deadline || '';
   renderChecklist();
@@ -839,6 +861,7 @@ function closeCardModal() {
 function syncModalHeader(card) {
   document.getElementById('modal-title').value = card.title;
   document.getElementById('modal-desc').value = card.description || '';
+  renderDescView(card.description || '');
   document.getElementById('modal-col-select').value = card.column_id;
   document.getElementById('modal-deadline').value = card.deadline || '';
 }
@@ -888,9 +911,20 @@ document.getElementById('modal-desc').addEventListener('blur', async () => {
   if (!activeCardId) return;
   const description = document.getElementById('modal-desc').value;
   const card = state.cards.find(c => c.id === activeCardId);
+  document.getElementById('modal-desc').style.display = 'none';
+  document.getElementById('modal-desc-view').style.display = '';
+  renderDescView(description);
   if (card && description !== (card.description || '')) {
     await sb.from('cards').update({ description }).eq('id', activeCardId);
   }
+});
+
+document.getElementById('modal-desc-view').addEventListener('click', e => {
+  if (e.target.tagName === 'A') return;
+  document.getElementById('modal-desc-view').style.display = 'none';
+  const ta = document.getElementById('modal-desc');
+  ta.style.display = '';
+  ta.focus();
 });
 
 document.getElementById('modal-col-select').addEventListener('change', async () => {
@@ -1005,6 +1039,24 @@ document.getElementById('setup-key').addEventListener('keydown', e => { if (e.ke
 function esc(s) {
   if (!s) return '';
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function linkify(text) {
+  if (!text) return '';
+  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  return parts.map((part, i) => {
+    if (i % 2 === 1) {
+      const href = esc(part);
+      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${href}</a>`;
+    }
+    return esc(part).replace(/\n/g, '<br>');
+  }).join('');
+}
+
+function renderDescView(text) {
+  const view = document.getElementById('modal-desc-view');
+  const html = linkify(text);
+  view.innerHTML = html || '<span class="desc-placeholder">Add a more detailed description…</span>';
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
