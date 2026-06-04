@@ -1078,23 +1078,30 @@ async function handleDescDrop(e) {
   e.currentTarget.classList.remove('desc-drop-active');
   if (!activeCardId) return;
 
-  const files = [...e.dataTransfer.files];
-  if (!files.length) return;
-
-  const view = document.getElementById('modal-desc-view');
   const ta   = document.getElementById('modal-desc');
-  view.classList.add('desc-uploading');
+  const view = document.getElementById('modal-desc-view');
+  const files = [...e.dataTransfer.files];
 
-  for (const file of files) {
-    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-    const path = `${activeCardId}/${Date.now()}-${safeName}`;
-    const { error } = await sb.storage.from('attachments').upload(path, file, { upsert: true });
-    if (error) { console.error('Upload failed:', error); continue; }
-    const { data: { publicUrl } } = sb.storage.from('attachments').getPublicUrl(path);
-    ta.value = ta.value.trim() ? ta.value.trim() + '\n' + publicUrl : publicUrl;
+  if (files.length > 0) {
+    // Files dragged from OS file system → upload to Supabase Storage
+    view.classList.add('desc-uploading');
+    for (const file of files) {
+      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+      const path = `${activeCardId}/${Date.now()}-${safeName}`;
+      const { error } = await sb.storage.from('attachments').upload(path, file, { upsert: true });
+      if (error) { console.error('Upload failed:', error); continue; }
+      const { data: { publicUrl } } = sb.storage.from('attachments').getPublicUrl(path);
+      ta.value = ta.value.trim() ? ta.value.trim() + '\n' + publicUrl : publicUrl;
+    }
+    view.classList.remove('desc-uploading');
+  } else {
+    // Image/link dragged from browser → use URL directly
+    const url = e.dataTransfer.getData('text/uri-list') || e.dataTransfer.getData('text/plain');
+    if (!url || !url.trim().startsWith('http')) return;
+    const cleanUrl = url.trim().split('\n')[0]; // take first URL if multiple
+    ta.value = ta.value.trim() ? ta.value.trim() + '\n' + cleanUrl : cleanUrl;
   }
 
-  view.classList.remove('desc-uploading');
   const description = ta.value;
   renderDescView(description);
   const card = state.cards.find(c => c.id === activeCardId);
