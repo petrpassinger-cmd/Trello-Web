@@ -356,7 +356,14 @@
     .modal-desc-view:hover { background: #dde1e7; }
     .modal-desc-view a { color: #0055cc; text-decoration: underline; }
     .modal-desc-view a:hover { color: #003d99; }
+    .modal-desc-view img { max-width: 100%; border-radius: 6px; margin: 4px 0; display: block; cursor: default; }
     .desc-ph { color: #8993a4; }
+    .desc-drop-active { border: 2px dashed #388bff !important; background: #e8f0ff !important; }
+    .desc-uploading { opacity: 0.6; pointer-events: none; }
+    .desc-upload-hint {
+      font-size: 12px; color: #626f86; margin-top: 5px;
+      display: flex; align-items: center; gap: 5px;
+    }
 
     /* ── Checklist ── */
     .modal-section { margin-top: 18px; }
@@ -557,6 +564,7 @@
         <div id="modal-desc-view" class="modal-desc-view"></div>
         <textarea id="modal-desc" class="modal-desc-ta" rows="3"
                   placeholder="Add a more detailed description..." style="display:none"></textarea>
+        <div class="desc-upload-hint">📎 Drop images or files here to attach</div>
       </div>
 
       <div class="modal-section">
@@ -1038,6 +1046,8 @@ document.getElementById('setup-btn').addEventListener('click', async () => {
 document.getElementById('setup-url').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('setup-key').focus(); });
 document.getElementById('setup-key').addEventListener('keydown', e => { if (e.key === 'Enter') document.getElementById('setup-btn').click(); });
 
+initDescDrop();
+
 // ── Utility ───────────────────────────────────────────────────────────────────
 function esc(s) {
   if (!s) return '';
@@ -1050,12 +1060,55 @@ function renderDescView(text) {
     view.innerHTML = '<span class="desc-ph">Add a more detailed description…</span>';
     return;
   }
+  const isImage = u => /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$/i.test(u) || u.includes('/storage/v1/object/public/');
   const parts = text.split(/(https?:\/\/[^\s]+)/g);
-  view.innerHTML = parts.map((part, i) =>
-    i % 2 === 1
-      ? `<a href="${esc(part)}" target="_blank" rel="noopener noreferrer">${esc(part)}</a>`
-      : esc(part).replace(/\n/g, '<br>')
-  ).join('');
+  view.innerHTML = parts.map((part, i) => {
+    if (i % 2 === 1) {
+      return isImage(part)
+        ? `<img src="${esc(part)}" alt="attachment">`
+        : `<a href="${esc(part)}" target="_blank" rel="noopener noreferrer">${esc(part)}</a>`;
+    }
+    return esc(part).replace(/\n/g, '<br>');
+  }).join('');
+}
+
+// ── File drag & drop into description ────────────────────────────────────────
+async function handleDescDrop(e) {
+  e.preventDefault();
+  e.currentTarget.classList.remove('desc-drop-active');
+  if (!activeCardId) return;
+
+  const files = [...e.dataTransfer.files];
+  if (!files.length) return;
+
+  const view = document.getElementById('modal-desc-view');
+  const ta   = document.getElementById('modal-desc');
+  view.classList.add('desc-uploading');
+
+  for (const file of files) {
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const path = `${activeCardId}/${Date.now()}-${safeName}`;
+    const { error } = await sb.storage.from('attachments').upload(path, file, { upsert: true });
+    if (error) { console.error('Upload failed:', error); continue; }
+    const { data: { publicUrl } } = sb.storage.from('attachments').getPublicUrl(path);
+    ta.value = ta.value.trim() ? ta.value.trim() + '\n' + publicUrl : publicUrl;
+  }
+
+  view.classList.remove('desc-uploading');
+  const description = ta.value;
+  renderDescView(description);
+  const card = state.cards.find(c => c.id === activeCardId);
+  if (card && description !== (card.description || '')) {
+    await sb.from('cards').update({ description }).eq('id', activeCardId);
+  }
+}
+
+function initDescDrop() {
+  [document.getElementById('modal-desc-view'), document.getElementById('modal-desc')].forEach(el => {
+    el.addEventListener('dragover',  e => { e.preventDefault(); el.classList.add('desc-drop-active'); });
+    el.addEventListener('dragleave', ()  => el.classList.remove('desc-drop-active'));
+    el.addEventListener('drop', handleDescDrop);
+  });
 }
 
 // ── Start ─────────────────────────────────────────────────────────────────────
