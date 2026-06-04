@@ -1060,8 +1060,8 @@ function renderDescView(text) {
     view.innerHTML = '<span class="desc-ph">Add a more detailed description…</span>';
     return;
   }
-  const isImage = u => /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$/i.test(u) || u.includes('/storage/v1/object/public/');
-  const parts = text.split(/(https?:\/\/[^\s]+)/g);
+  const isImage = u => /\.(jpg|jpeg|png|gif|webp|svg|bmp)(\?.*)?$/i.test(u) || u.includes('/storage/v1/object/public/') || u.startsWith('data:image/');
+  const parts = text.split(/((?:https?:\/\/|data:image\/)[^\s]+)/g);
   view.innerHTML = parts.map((part, i) => {
     if (i % 2 === 1) {
       return isImage(part)
@@ -1083,15 +1083,23 @@ async function handleDescDrop(e) {
   const files = [...e.dataTransfer.files];
 
   if (files.length > 0) {
-    // Files dragged from OS file system → upload to Supabase Storage
     view.classList.add('desc-uploading');
     for (const file of files) {
-      const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
-      const path = `${activeCardId}/${Date.now()}-${safeName}`;
-      const { error } = await sb.storage.from('attachments').upload(path, file, { upsert: true });
-      if (error) { console.error('Upload failed:', error); continue; }
-      const { data: { publicUrl } } = sb.storage.from('attachments').getPublicUrl(path);
-      ta.value = ta.value.trim() ? ta.value.trim() + '\n' + publicUrl : publicUrl;
+      if (file.type.startsWith('image/')) {
+        // Images → convert to base64 (no storage setup needed)
+        const dataUrl = await new Promise(res => {
+          const r = new FileReader(); r.onload = e => res(e.target.result); r.readAsDataURL(file);
+        });
+        ta.value = ta.value.trim() ? ta.value.trim() + '\n' + dataUrl : dataUrl;
+      } else {
+        // Other files → upload to Supabase Storage
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = `${activeCardId}/${Date.now()}-${safeName}`;
+        const { error } = await sb.storage.from('attachments').upload(path, file, { upsert: true });
+        if (error) { console.error('Upload failed:', error); continue; }
+        const { data: { publicUrl } } = sb.storage.from('attachments').getPublicUrl(path);
+        ta.value = ta.value.trim() ? ta.value.trim() + '\n' + publicUrl : publicUrl;
+      }
     }
     view.classList.remove('desc-uploading');
   } else {
